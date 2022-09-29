@@ -856,7 +856,12 @@ namespace UnityEditor.AddressableAssets.Settings
                 formatter.Serialize(stream, m_ProfileSettings);
                 formatter.Serialize(stream, m_GroupAssets.Count);
                 foreach (var g in m_GroupAssets)
-                    g.SerializeForHash(formatter, stream);
+				{
+                    // Null check as a precaution
+                    if (g != null)
+                        g.SerializeForHash(formatter, stream);
+                }
+
                 return (m_CachedHash = HashingMethods.Calculate(stream).ToHash128());
             }
         }
@@ -1371,6 +1376,9 @@ namespace UnityEditor.AddressableAssets.Settings
 
             foreach (var group in groups)
             {
+                if (group == null)
+                    continue;
+
                 foreach (var entry in group.entries)
                 {
                     if (entry.labels.Contains(oldLabelName))

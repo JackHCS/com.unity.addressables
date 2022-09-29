@@ -2374,6 +2374,9 @@ namespace UnityEditor.AddressableAssets.Settings
 
         internal void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
+            // Run some cleanup before doing any further work
+            PruneMissingAndDuplicateGroups(this);
+
             List<string> assetEntryCollections = new List<string>();
             var aa = this;
             bool relatedAssetChanged = false;
@@ -3176,5 +3179,61 @@ namespace UnityEditor.AddressableAssets.Settings
         /// The ids of the registered commands.
         /// </summary>
         public static IEnumerable<string> CustomAssetGroupCommands => s_CustomAssetGroupCommands.Keys;
+
+        /// <summary>
+        /// Method to run up front to remove any null or duplicate entries from the AddressableAssetSettings.groups in one pass to prevent potential exceptions later.
+        /// Null entries only occasionally occur from incomplete commits of either the AssetGroups or AddressableAssetSettings files and unfortunately the AddressableAssetSettings does not account for groups potentially being null.
+        /// Duplicate entries only occasionally occur from incorrect merges of AddressableAssetSettings files, can cause issues at build time.
+        /// </summary>
+        /// <param name="settings">The AddressableAssetSettings asset/instance.</param>
+        /// <param name="callSaveAssets">Flag to indicate whether AssetDatabase.SaveAssets() should be called.</param>
+        public static bool PruneMissingAndDuplicateGroups(AddressableAssetSettings settings, bool callSaveAssets = true)
+        {
+            // Cache of encountered AddressableAssetGroups
+            HashSet<AddressableAssetGroup> encounteredGroups = new HashSet<AddressableAssetGroup>();
+
+            int missingCount = 0;
+            int duplicateCount = 0;
+            var groups = settings.groups;
+            for (int i = groups.Count - 1; i >= 0; i--)
+            {
+                var entry = groups[i];
+                // Check if the entry is null
+                if (entry == null)
+                {
+                    // Remove any null entries
+                    groups.RemoveAt(i);
+                    missingCount++;
+                    continue;
+                }
+
+                // Check if the entry has already been encountered
+                if (encounteredGroups.Contains(entry))
+                {
+                    // Remove any null entries
+                    groups.RemoveAt(i);
+                    duplicateCount++;
+                }
+                else
+                {
+                    encounteredGroups.Add(entry);
+                }
+            }
+
+            int total = missingCount + duplicateCount;
+            if (total > 0)
+            {
+                Debug.Log("Addressable settings contains invalid references [missing=" + missingCount + ", duplicate=" + duplicateCount + "]. Removing reference(s).");
+
+                EditorUtility.SetDirty(settings);
+
+                if (callSaveAssets)
+                    AssetDatabase.SaveAssets();
+
+                return true;
+            }
+
+            return false;
+        }
     }
 }
